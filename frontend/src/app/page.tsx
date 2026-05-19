@@ -475,51 +475,53 @@ export default function Home() {
               </div>
 
               {/* Logos Section */}
-              <div className="glass-panel rounded-3xl p-6 md:p-8 border border-slate-800 flex flex-col gap-6">
-                <div className="flex items-center gap-3">
-                  <Award className="w-5 h-5 text-cyan-400" />
-                  <h3 className="font-extrabold text-lg tracking-wider">Conceptos de Logotipo Generados</h3>
-                </div>
+              {results.logos && results.logos.length > 0 && (
+                <div className="glass-panel rounded-3xl p-6 md:p-8 border border-slate-800 flex flex-col gap-6">
+                  <div className="flex items-center gap-3">
+                    <Award className="w-5 h-5 text-cyan-400" />
+                    <h3 className="font-extrabold text-lg tracking-wider">Conceptos de Logotipo Generados</h3>
+                  </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {results.logos.map((logoUrl, idx) => (
-                    <div key={idx} className="glass-card rounded-2xl overflow-hidden flex flex-col border border-slate-800">
-                      <div className="relative aspect-square w-full bg-slate-950 flex items-center justify-center group overflow-hidden">
-                        <img 
-                          src={logoUrl} 
-                          alt={`Logo Concept ${idx + 1}`}
-                          className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-3 transition-all">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {results.logos.map((logoUrl, idx) => (
+                      <div key={idx} className="glass-card rounded-2xl overflow-hidden flex flex-col border border-slate-800">
+                        <div className="relative aspect-square w-full bg-slate-950 flex items-center justify-center group overflow-hidden">
+                          <img 
+                            src={logoUrl} 
+                            alt={`Logo Concept ${idx + 1}`}
+                            className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-3 transition-all">
+                            <a 
+                              href={logoUrl} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white hover:text-cyan-400 hover:border-cyan-500/50 transition-all"
+                              title="Ver en Grande"
+                            >
+                              <Eye className="w-4.5 h-4.5" />
+                            </a>
+                          </div>
+                        </div>
+                        <div className="p-4 flex items-center justify-between bg-slate-950/80 border-t border-slate-900">
+                          <span className="font-bold text-xs tracking-wider uppercase text-slate-400">Concepto #{idx + 1}</span>
                           <a 
                             href={logoUrl} 
-                            target="_blank" 
+                            download={`logo-concept-${idx + 1}.jpg`}
+                            target="_blank"
                             rel="noreferrer"
-                            className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white hover:text-cyan-400 hover:border-cyan-500/50 transition-all"
-                            title="Ver en Grande"
+                            className="text-xs font-bold text-cyan-400 hover:text-white transition-all flex items-center gap-1.5"
                           >
-                            <Eye className="w-4.5 h-4.5" />
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Descargar</span>
                           </a>
                         </div>
                       </div>
-                      <div className="p-4 flex items-center justify-between bg-slate-950/80 border-t border-slate-900">
-                        <span className="font-bold text-xs tracking-wider uppercase text-slate-400">Concepto #{idx + 1}</span>
-                        <a 
-                          href={logoUrl} 
-                          download={`logo-concept-${idx + 1}.jpg`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs font-bold text-cyan-400 hover:text-white transition-all flex items-center gap-1.5"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Descargar</span>
-                        </a>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </section>
         )}

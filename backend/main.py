@@ -9,6 +9,23 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from unittest.mock import MagicMock
 
+# Load .env file manually if exists
+def load_env_file():
+    for path in [".env", "backend/.env", "../.env", "/home/ubuntu/klipso_branding-logo/backend/.env"]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            os.environ[k.strip()] = v.strip().strip('"').strip("'")
+            except Exception:
+                pass
+            break
+
+load_env_file()
+
 # 1. Mock heavy/external dependencies before importing brandkit-ai
 sys.modules['streamlit'] = MagicMock()
 sys.modules['pinecone'] = MagicMock()
@@ -52,6 +69,43 @@ class BrandkitInputs(BaseModel):
     company_keywords: List[str]
     brand_personality: str
     target_segment: str
+
+# Helper to generate logos using DALL-E 3
+async def generate_dalle_logo(inputs: BrandkitInputs) -> List[str]:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or api_key.startswith("your-"):
+        return []
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            prompt = (
+                f"Sleek modern minimalist professional vector style logo concept for brand named '{inputs.brand_name}'. "
+                f"Description: {inputs.brand_description}. "
+                f"Industry: {inputs.brand_industry}. "
+                f"Centered on a simple dark elegant background."
+            )
+            response = await client.post(
+                "https://api.openai.com/v1/images/generations",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "dall-e-3",
+                    "prompt": prompt,
+                    "n": 1,
+                    "size": "1024x1024",
+                    "quality": "standard"
+                }
+            )
+            if response.status_code == 200:
+                data = response.json().get("data", [])
+                if data:
+                    url = data[0].get("url")
+                    if url:
+                        return [url]
+        except Exception:
+            pass
+    return []
 
 # Helper: local Ollama query
 async def query_local_ollama(prompt: str) -> str:
@@ -223,105 +277,77 @@ async def generate_brand_identity(inputs: BrandkitInputs):
         f"Segment: {inputs.target_segment}."
     )
 
-    brandkit_output = ""
-    logo_urls = []
+    # FIX 2: Ask the LLM to respond in strict, clean JSON format
+    prompt = f"""Genera una propuesta de identidad de marca basada en estos datos:
+Nombre de marca: {inputs.brand_name}
+Descripción: {inputs.brand_description}
+Industria: {inputs.brand_industry}
+Keywords: {', '.join(inputs.company_keywords)}
+Personalidad: {inputs.brand_personality}
+Segmento de mercado: {inputs.target_segment}
 
-    # 1. Attempt using brandkit-ai functions directly
-    if brandkit_app is not None:
+Responde ÚNICAMENTE con un objeto JSON estricto sin formatear, sin bloques de código ```json o texto adicional. El formato de la respuesta debe ser:
+{{
+  "colors": ["#hex1", "#hex2", "#hex3"],
+  "fonts": {{
+    "heading": "Nombre de la fuente para títulos (ej. Montserrat)",
+    "body": "Nombre de la fuente para el cuerpo de texto (ej. Inter)",
+    "accent": "Nombre de la fuente para acentos (ej. Fira Code)"
+  }},
+  "tagline": "Un eslogan original y sugerente para la marca"
+}}
+"""
+
+    fallback_data = {
+        "colors": ["#0F172A", "#0EA5E9", "#F43F5E"],
+        "fonts": {
+            "heading": "Montserrat",
+            "body": "Inter",
+            "accent": "Fira Code"
+        },
+        "tagline": "Empowering next-generation design."
+    }
+
+    brandkit_data = None
+
+    # Try Claude
+    raw_json = await query_claude(prompt)
+    # Fallback to local Ollama
+    if not raw_json:
+        raw_json = await query_local_ollama(prompt)
+
+    if raw_json:
         try:
-            # Set modules keys before execution
-            brandkit_app.openai.api_key = os.getenv("OPENAI_API_KEY", "your-openai-api-key")
-            brandkit_app.claude_api_key = os.getenv("ANTHROPIC_API_KEY", "your-anthropic-api-key")
-            
-            # Re-initialize clients on the module if keys present
-            import anthropic
-            brandkit_app.client = anthropic.Anthropic(api_key=brandkit_app.claude_api_key)
-            
-            # Generate brand kit via app
-            brandkit_output = brandkit_app.generate_brand_kit(combined_input)
-            
-            # Generate logos via app
-            if brandkit_output:
-                logo_urls = brandkit_app.generate_logo(inputs.dict(), brandkit_output)
+            clean_json = raw_json.strip()
+            if clean_json.startswith("```json"):
+                clean_json = clean_json[7:]
+            if clean_json.endswith("```"):
+                clean_json = clean_json[:-3]
+            clean_json = clean_json.strip()
+
+            parsed = json.loads(clean_json)
+            if "colors" in parsed and "fonts" in parsed and "tagline" in parsed:
+                if isinstance(parsed["colors"], list) and len(parsed["colors"]) >= 3:
+                    brandkit_data = parsed
         except Exception:
             pass
 
-    # 2. Local Ollama or heuristic synthesis fallback if API calls fails or keys are mock
-    if not brandkit_output or "your-anthropic-api-key" in str(os.getenv("ANTHROPIC_API_KEY", "")):
-        # Generate with Ollama
-        prompt = f"""Genera una propuesta de identidad de marca basada en estos datos:
-{combined_input}
+    if not brandkit_data:
+        brandkit_data = fallback_data
 
-Responde en este formato exacto:
-1. **Color Theme**:
-   - #1E3A8A (Primary Blue) - Refleja confianza.
-   - #10B981 (Secondary Emerald) - Representa crecimiento.
-   - #F59E0B (Accent Amber) - Aporta energía.
-2. **Font Theme**:
-   - Heading: Montserrat
-   - Body: Inter
-   - Accent: Playfair Display
-3. **Tagline**:
-   - Tu tagline sugerido aquí
-4. **Logo Concept**:
-   - Un concepto visual moderno e icónico.
-"""
-        brandkit_output = await query_local_ollama(prompt)
-        if not brandkit_output:
-            # Heuristic default values
-            brandkit_output = f"""
-1. **Color Theme**:
-   - #0F172A (Deep Slate) - Primary color representing trust.
-   - #0EA5E9 (Sky Blue) - Secondary color representing modern tech.
-   - #F43F5E (Rose Accent) - Vivid color adding excitement.
-2. **Font Theme**:
-   - Heading: Montserrat
-   - Body: Inter
-   - Accent: Fira Code
-3. **Tagline**:
-   - Empowering Next-Generation Innovations.
-4. **Logo Concept**:
-   - A stylized geometric icon combining abstract interconnecting shapes.
-"""
+    # Extract clean values
+    colors = brandkit_data["colors"]
+    headings = brandkit_data["fonts"].get("heading", "Montserrat")
+    body = brandkit_data["fonts"].get("body", "Inter")
+    accent = brandkit_data["fonts"].get("accent", "Fira Code")
+    tagline = brandkit_data["tagline"]
 
-    # Parse values from generated brand kit
-    colors = []
-    # Find all hex colors
-    found_hex = re.findall(r'#[0-9A-Fa-f]{6}', brandkit_output)
-    if found_hex:
-        # Deduplicate while preserving order
-        seen = set()
-        colors = [x for x in found_hex if not (x in seen or seen.add(x))][:5]
-    
-    if len(colors) < 3:
-        # Default premium palette (Midnight, Sky, Coral)
-        colors = ["#0F172A", "#0EA5E9", "#F43F5E"]
-
-    # Parse fonts
-    headings = "Montserrat"
-    body = "Inter"
-    accent = "Fira Code"
-    
-    font_matches = re.findall(r'(?:Heading|Body|Accent|1\.|2\.|3\.)\s*:\s*([A-Za-z\s]+)', brandkit_output)
-    if len(font_matches) >= 3:
-        headings, body, accent = [f.strip() for f in font_matches[:3]]
-    elif "Montserrat" in brandkit_output or "Inter" in brandkit_output:
-        pass # Keep defaults
-
-    # Parse tagline
-    tagline = "Innovating the future of branding."
-    tagline_match = re.search(r'3\.\s+\*\*Tagline\*\*:(.*?)(?=4\.)', brandkit_output, re.DOTALL)
-    if tagline_match:
-        tagline = tagline_match.group(1).replace("-", "").strip()
-
-    # Logo placeholders (Premium design-centric vector placeholders or mock images)
-    if not logo_urls:
-        # Generate beautiful premium vector logo representation URLs
-        logo_urls = [
-            "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&q=80",  # Geometric abstract art
-            "https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=400&q=80",  # Sleek gradient shape
-            "https://images.unsplash.com/photo-1618005198143-e528346d9a50?w=400&q=80"   # Minimal design token
-        ]
+    # FIX 1: Generate logos via DALL-E 3 if OPENAI_API_KEY is present and not mock
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    if openai_key and not openai_key.startswith("your-"):
+        logo_urls = await generate_dalle_logo(inputs)
+    else:
+        logo_urls = []
 
     # Map palettes with rich rationale
     palettes = [
