@@ -1,0 +1,10 @@
+streamlit
+anthropic
+pinecone-client
+pandas
+sentence-transformers
+numpy
+openai
+requests
+pillow
+pyngrok

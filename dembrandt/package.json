@@ -1,0 +1,56 @@
+{
+  "name": "dembrandt",
+  "version": "0.12.5",
+  "description": "Extract design tokens and publicly visible CSS information from any website",
+  "mcpName": "io.github.dembrandt/dembrandt",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "dembrandt": "index.js",
+    "dembrandt-mcp": "mcp-server.js"
+  },
+  "files": [
+    "index.js",
+    "mcp-server.js",
+    "lib/"
+  ],
+  "scripts": {
+    "start": "node index.js",
+    "install-browser": "npx playwright install chromium firefox || echo 'Playwright browser installation failed. You may need to install system dependencies manually.'",
+    "local-ui": "cd local-ui && npm start",
+    "qa:baseline": "node test/qa.mjs --baseline",
+    "qa:diff": "node test/qa.mjs --diff",
+    "qa:site": "node test/qa.mjs --site"
+  },
+  "keywords": [
+    "design-tokens",
+    "design-system",
+    "branding",
+    "css-analysis",
+    "cli",
+    "playwright"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dembrandt/dembrandt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dembrandt/dembrandt/issues"
+  },
+  "homepage": "https://dembrandt.com",
+  "author": "thevangelist <info@esajuhana.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@playwright/browser-chromium": "^1.57.0",
+    "@playwright/browser-firefox": "^1.57.0",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "ora": "^7.0.1",
+    "playwright-core": "^1.57.0",
+    "zod": "4.3.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
