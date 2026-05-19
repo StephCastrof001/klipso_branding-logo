@@ -2,13 +2,15 @@ import os
 import sys
 sys.path.append('/home/ubuntu/.local/lib/python3.12/site-packages')
 
+# Version: 4.0.0
+
 import re
 import json
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import List
 from unittest.mock import MagicMock
 import google.generativeai as genai
 
@@ -323,16 +325,6 @@ Responde ÚNICAMENTE con un JSON estricto sin formatear, sin bloques de código 
 
 @app.post("/generate")
 async def generate_brand_identity(inputs: BrandkitInputs):
-    # Combined description as brandkit-ai expects
-    combined_input = (
-        f"Brand Name: {inputs.brand_name}. "
-        f"Description: {inputs.brand_description}. "
-        f"Industry: {inputs.brand_industry}. "
-        f"Keywords: {', '.join(inputs.company_keywords)}. "
-        f"Personality: {inputs.brand_personality}. "
-        f"Segment: {inputs.target_segment}."
-    )
-
     # FIX 2: Ask the LLM to respond in strict, clean JSON format
     prompt = f"""Genera una propuesta de identidad de marca basada en estos datos:
 Nombre de marca: {inputs.brand_name}
@@ -372,19 +364,19 @@ Responde ÚNICAMENTE con un objeto JSON estricto sin formatear, sin bloques de c
     # Try Gemini first
     raw_json = await query_gemini(prompt)
     if raw_json:
-        print("Using Gemini for identity generation...")
+        print("Using Gemini for identity generation. ..")
 
     # Try Claude
     if not raw_json:
         raw_json = await query_claude(prompt)
         if raw_json:
-            print("Using Claude for identity generation...")
+            print("Using Claude for identity generation. ..")
 
     # Fallback to local Ollama
     if not raw_json:
         raw_json = await query_local_ollama(prompt)
         if raw_json:
-            print("Using Ollama for identity generation...")
+            print("Using Ollama for identity generation. ..")
 
     if raw_json:
         try:
