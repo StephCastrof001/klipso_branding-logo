@@ -1,5 +1,7 @@
 import os
 import sys
+sys.path.append('/home/ubuntu/.local/lib/python3.12/site-packages')
+
 import re
 import json
 import httpx
@@ -8,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from unittest.mock import MagicMock
+import google.generativeai as genai
+
 
 # Load .env file manually if exists
 def load_env_file():
@@ -107,7 +111,48 @@ async def generate_dalle_logo(inputs: BrandkitInputs) -> List[str]:
             pass
     return []
 
+# Helper: query Gemini 2.0 Flash
+async def query_gemini(prompt: str) -> str:
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return ""
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception:
+        pass
+    return ""
+
+# Helper: generate Imagen 3.0 logo concepts
+async def generate_imagen_logo(prompt: str) -> List[str]:
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return []
+    try:
+        genai.configure(api_key=api_key)
+        imagen = genai.ImageGenerationModel("imagen-3.0-generate-002")
+        result = imagen.generate_images(
+            prompt=f"Professional minimalist logo: {prompt}",
+            number_of_images=3,
+            aspect_ratio="1:1"
+        )
+        import base64
+        logos = []
+        for i, img in enumerate(result.images):
+            path = f"/tmp/logo_{i}.png"
+            img._pil_image.save(path)
+            with open(path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+            logos.append(f"data:image/png;base64,{b64}")
+        return logos
+    except Exception:
+        pass
+    return []
+
 # Helper: local Ollama query
+
 async def query_local_ollama(prompt: str) -> str:
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
@@ -179,14 +224,25 @@ Genera exactamente:
 Responde ÚNICAMENTE con un JSON estricto sin formatear, sin bloques de código ```json o texto adicional. Las claves deben ser: "brief" (string) y "brandkit_inputs" (objeto con las claves mencionadas anteriormente).
 """
     
-    # Try Claude first
-    raw_response = await query_claude(prompt)
+    # Try Gemini first
+    raw_response = await query_gemini(prompt)
+    if raw_response:
+        print("Using Gemini for brief generation...")
     
-    # Fallback to Ollama if Claude fails/keys missing
+    # Try Claude second
+    if not raw_response:
+        raw_response = await query_claude(prompt)
+        if raw_response:
+            print("Using Claude for brief generation...")
+        
+    # Fallback to Ollama if both fail
     if not raw_response:
         raw_response = await query_local_ollama(prompt)
-        
-    # Standard high-fidelity deterministic fallback if both fail
+        if raw_response:
+            print("Using Ollama for brief generation...")
+            
+    # Standard high-fidelity deterministic fallback if all fail
+
     if not raw_response:
         words = req.keywords.split(",")
         keywords_list = [w.strip() for w in words][:5]
@@ -294,7 +350,8 @@ Responde ÚNICAMENTE con un objeto JSON estricto sin formatear, sin bloques de c
     "body": "Nombre de la fuente para el cuerpo de texto (ej. Inter)",
     "accent": "Nombre de la fuente para acentos (ej. Fira Code)"
   }},
-  "tagline": "Un eslogan original y sugerente para la marca"
+  "tagline": "Un eslogan original y sugerente para la marca",
+  "logo_concept": "Descripción conceptual detallada en inglés para generar un logo (ej. simple elegant geometric abstract vector icon of overlapping circles)"
 }}
 """
 
@@ -305,16 +362,29 @@ Responde ÚNICAMENTE con un objeto JSON estricto sin formatear, sin bloques de c
             "body": "Inter",
             "accent": "Fira Code"
         },
-        "tagline": "Empowering next-generation design."
+        "tagline": "Empowering next-generation design.",
+        "logo_concept": "simple minimalist elegant vector geometric tech icon logo"
     }
+
 
     brandkit_data = None
 
+    # Try Gemini first
+    raw_json = await query_gemini(prompt)
+    if raw_json:
+        print("Using Gemini for identity generation...")
+
     # Try Claude
-    raw_json = await query_claude(prompt)
+    if not raw_json:
+        raw_json = await query_claude(prompt)
+        if raw_json:
+            print("Using Claude for identity generation...")
+
     # Fallback to local Ollama
     if not raw_json:
         raw_json = await query_local_ollama(prompt)
+        if raw_json:
+            print("Using Ollama for identity generation...")
 
     if raw_json:
         try:
@@ -342,12 +412,10 @@ Responde ÚNICAMENTE con un objeto JSON estricto sin formatear, sin bloques de c
     accent = brandkit_data["fonts"].get("accent", "Fira Code")
     tagline = brandkit_data["tagline"]
 
-    # FIX 1: Generate logos via DALL-E 3 if OPENAI_API_KEY is present and not mock
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-    if openai_key and not openai_key.startswith("your-"):
-        logo_urls = await generate_dalle_logo(inputs)
-    else:
-        logo_urls = []
+    # Generate logos via Gemini Imagen 3
+    logo_direction = brandkit_data.get("logo_concept", "modern minimal logo")
+    logo_urls = await generate_imagen_logo(logo_direction)
+
 
     # Map palettes with rich rationale
     palettes = [
