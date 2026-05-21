@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-import google.generativeai as genai
+from openai import OpenAI
 import base64
 from io import BytesIO
 from PIL import Image
@@ -76,18 +76,20 @@ class GenerateRequest(BaseModel):
     brand_personality: Optional[str] = None
     target_segment: Optional[str] = None
 
-# Helper to query Gemini 2.0 Flash
-async def query_gemini(prompt: str) -> str:
-    api_key = os.getenv("GOOGLE_API_KEY")
+# Helper to query LLM via OpenAI
+async def query_llm(prompt: str) -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return ""
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Gemini error: {e}")
+        print(f"OpenAI error: {e}")
     return ""
 
 # Helper to query Claude
@@ -139,38 +141,31 @@ async def query_local_ollama(prompt: str) -> str:
             print(f"Ollama error: {e}")
     return ""
 
-# Helper: generate Imagen 3.0 logo concepts
+# Helper: generate DALL-E logo concepts
 async def generate_imagen_logo(prompt: str) -> List[str]:
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return []
     try:
-        genai.configure(api_key=api_key)
-        imagen = genai.ImageGenerationModel("imagen-3.0-generate-002")
-        result = imagen.generate_images(
+        client = OpenAI(api_key=api_key)
+        response = client.images.generate(
+            model="dall-e-3",
             prompt=f"Professional minimalist logo: {prompt}",
-            number_of_images=1,
-            aspect_ratio="1:1"
+            n=1,
+            size="1024x1024",
+            response_format="b64_json"
         )
-        logos = []
-        for img in result.images:
-            out_buffer = BytesIO()
-            pil_img = img._pil_image
-            if pil_img.mode != 'RGB':
-                pil_img = pil_img.convert('RGB')
-            pil_img.save(out_buffer, format='JPEG', quality=90)
-            b64 = base64.b64encode(out_buffer.getvalue()).decode('utf-8')
-            logos.append(f"data:image/jpeg;base64,{b64}")
-        return logos
+        b64_data = response.data[0].b64_json
+        return [f"data:image/png;base64,{b64_data}"]
     except Exception as e:
-        print(f"Imagen error: {e}")
+        print(f"DALL-E error: {e}")
     return []
 
 # Helper: generate Together FLUX logo (using "together")
 async def generate_flux_logo(inputs: BrandkitInputs, direction: str, colors: List[str]) -> List[str]:
     api_key = os.getenv("TOGETHER_API_KEY")
     if not api_key or api_key.startswith("your-") or "placeholder" in api_key.lower():
-        print("Together API Key not configured or placeholder. Falling back to Gemini Imagen 3.")
+        print("Together API Key not configured or placeholder. Falling back to DALL-E.")
         return await generate_imagen_logo(f"Sleek modern minimalist professional logo, style {direction}, colors: {', '.join(colors)}")
         
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -252,9 +247,9 @@ Responde ÚNICAMENTE con el objeto JSON estricto, sin bloques de código ```json
     
     raw_response = None
     # Try Gemini first
-    raw_response = await query_gemini(prompt)
+    raw_response = await query_llm(prompt)
     if raw_response:
-        print("Using Gemini for brief generation...")
+        print("Using OpenAI for brief generation...")
         
     # Try Claude
     if not raw_response:
@@ -368,7 +363,7 @@ Responde ÚNICAMENTE con un objeto JSON estricto sin formatear, sin bloques de c
         fallback_taglines = {"en": "Simplifying the future.", "es": "Simplificando el futuro."}
 
     parsed = None
-    raw_json = await query_gemini(prompt)
+    raw_json = await query_llm(prompt)
     if not raw_json:
         raw_json = await query_claude(prompt)
     if not raw_json:
