@@ -233,8 +233,8 @@ Keywords: {req.keywords}
 Audiencia Objetivo: {req.audience or req.target_audience or 'General'}
 
 Genera un JSON estrictamente válido que contenga:
-1. "brief": Un brief creativo estético de aproximadamente 150 palabras que conecte la visión, misión, propósito y valores de la empresa.
-2. "name_suggestions": Una lista de exactamente 3 opciones de nombres sugeridos con su respectivo fundamento de diseño ("rationale"). Cada opción debe tener el formato: {{"name": "Nombre", "rationale": "Explicación"}}.
+1. "brief": Brief de marca estratégico de 150-200 palabras. Estructura: párrafo 1 (qué hace única esta empresa y contra qué va), párrafo 2 (cómo los valores se traducen en comportamiento de marca), párrafo 3 (promesa concreta al usuario). Sin jerga corporativa. Usa lenguaje directo del sector. PROHIBIDO usar: ecosistema líder, soluciones innovadoras, de alto impacto, de vanguardia.
+2. "name_suggestions": Lista de exactamente 3 nombres. Criterios: cortos (máx 2 palabras), memorables en LATAM, sin anglicismos genéricos (hub/forge/nova/next). Preferir fusiones español+tech o palabras que evoquen acción concreta. Formato: {{"name": "Nombre", "rationale": "Explicación del concepto en 1 oración"}}.
 3. "brandkit_inputs": Un objeto con:
    - "brand_name": Si se especificó el Nombre de Empresa arriba, utilízalo. Si no se especificó, utiliza la primera opción de la lista "name_suggestions".
    - "brand_description": Descripción de marca corta de 2 oraciones.
@@ -306,15 +306,24 @@ Responde ÚNICAMENTE con el objeto JSON estricto, sin bloques de código ```json
         }
         
     # Generate logo_prompt with OpenAI
-    first_name = parsed.get("name_suggestions", [{}])[0].get("name", parsed.get("brandkit_inputs", {}).get("brand_name", req.industry))
+    first_name = req.company_name if req.company_name else parsed.get("name_suggestions", [{}])[0].get("name", parsed.get("brandkit_inputs", {}).get("brand_name", req.industry))
+
+    direction = req.direction or "minimal"
+    style_map = {
+        "minimal": "minimalist geometric, flat vector, 1-2 core elements, 40% negative space, 2-3px line weight",
+        "bold": "bold high-contrast, strong geometric shapes, single focal point, 3 colors max, thick strokes",
+        "warm": "friendly rounded shapes, humanist proportions, warm color palette, approachable and human"
+    }
+    style_desc = style_map.get(direction, style_map["minimal"])
+
     logo_prompt_formula = (
-        f"Create a {req.direction if hasattr(req, 'direction') else 'minimal'} logo concept for "
-        f"{req.industry} called {first_name}. "
-        f"Use a symbol to represent {req.purpose}. "
-        f"Style: {req.direction if hasattr(req, 'direction') else 'minimal'}. "
-        f"Color palette based on brand values. "
-        f"Composition: icon above wordmark. "
-        f"Constraints: flat vector-like, scalable, no mockup, no background texture, no tiny details."
+        f"Professional SVG logo for {first_name}, {req.industry}. "
+        f"Style: {style_desc}. "
+        f"Concept: single abstract symbol representing {req.purpose[:50]}. "
+        f"Typography: clean wordmark below icon, modern sans-serif. "
+        f"White background, must be scalable to 16px favicon. "
+        f"Negative: no gradients, no shadows, no texture, no grain, no rough edges, "
+        f"no photorealism, no clipart, no mockup, no watermark, no complex shading, no decorative elements."
     )
     # Use LLM to refine the logo prompt (or use formula directly as fallback)
     llm_logo_prompt = await query_llm(
