@@ -57,6 +57,7 @@ class BriefRequest(BaseModel):
     keywords: str
     audience: Optional[str] = None
     target_audience: Optional[str] = None
+    direction: Optional[str] = "minimal"
 
 class BrandkitInputs(BaseModel):
     brand_name: str
@@ -304,6 +305,24 @@ Responde ÚNICAMENTE con el objeto JSON estricto, sin bloques de código ```json
             }
         }
         
+    # Generate logo_prompt with OpenAI
+    first_name = parsed.get("name_suggestions", [{}])[0].get("name", parsed.get("brandkit_inputs", {}).get("brand_name", req.industry))
+    logo_prompt_formula = (
+        f"Create a {req.direction if hasattr(req, 'direction') else 'minimal'} logo concept for "
+        f"{req.industry} called {first_name}. "
+        f"Use a symbol to represent {req.purpose}. "
+        f"Style: {req.direction if hasattr(req, 'direction') else 'minimal'}. "
+        f"Color palette based on brand values. "
+        f"Composition: icon above wordmark. "
+        f"Constraints: flat vector-like, scalable, no mockup, no background texture, no tiny details."
+    )
+    # Use LLM to refine the logo prompt (or use formula directly as fallback)
+    llm_logo_prompt = await query_llm(
+        f"Mejora y refina este prompt de logo para hacerlo mas preciso y evocador, "
+        f"manteniendo la formula base. Responde SOLO con el prompt mejorado, sin explicaciones:\n{logo_prompt_formula}"
+    )
+    parsed["logo_prompt"] = llm_logo_prompt if llm_logo_prompt else logo_prompt_formula
+
     return parsed
 
 @app.post("/generate")

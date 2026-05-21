@@ -45,6 +45,7 @@ export default function Home() {
     target_segment: ""
   });
   const [styleDirection, setStyleDirection] = useState("minimal");
+  const [logoPrompt, setLogoPrompt] = useState("");
 
   // Step 3: Brand Identity (Visible after `/generate`)
   const [results, setResults] = useState<{
@@ -73,7 +74,8 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...companyData,
-          values: valuesArray
+          values: valuesArray,
+          direction: styleDirection
         })
       });
       if (res.ok) {
@@ -81,6 +83,7 @@ export default function Home() {
         setBriefText(data.brief);
         setNameSuggestions(data.name_suggestions || []);
         setBrandkitInputs(data.brandkit_inputs);
+        setLogoPrompt(data.logo_prompt || "");
         // If user didn't specify name, set it from first suggestion
         if (!companyData.company_name && data.name_suggestions?.length > 0) {
           setBrandkitInputs(prev => ({
@@ -340,6 +343,31 @@ export default function Home() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Logo Prompt */}
+                {logoPrompt && (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Logo Prompt</h4>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(logoPrompt, "logo-prompt")}
+                        className="flex items-center gap-1 text-[9px] font-semibold text-slate-400 hover:text-cyan-400 transition-colors border border-slate-700 hover:border-cyan-500/50 rounded-lg px-2 py-1"
+                      >
+                        {copiedText === "logo-prompt" ? (
+                          <><Check className="w-3 h-3 text-green-400" /><span className="text-green-400">Copiado</span></>
+                        ) : (
+                          <><Copy className="w-3 h-3" /><span>Copiar</span></>
+                        )}
+                      </button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={logoPrompt}
+                      className="bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-300 leading-relaxed outline-none h-28 resize-none cursor-text select-all"
+                    />
                   </div>
                 )}
 
